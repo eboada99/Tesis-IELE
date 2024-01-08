@@ -169,7 +169,7 @@ app.layout = html.Div(style={'overflowY': 'auto'},
 
 def update_graphs(n):
     # Read data from the CSV file
-    data = pd.read_csv('sensor_data.csv')
+    data = pd.read_csv('Datos/sensor_data.csv')
     data['Time'] = pd.to_datetime(data['Time'])  # Convert the time column to datetime
 
     # Create figures using the data from the CSV file
