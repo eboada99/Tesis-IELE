@@ -17,10 +17,7 @@ pio.renderers.default = "browser"
 from sqlalchemy import create_engine, text
 from pgmpy.readwrite import BIFReader
 from statistics import mode
-import socket
 import matplotlib.pyplot as plt
-import csv
-import datetime
 import matplotlib.dates as mdates
 import threading
 
@@ -35,11 +32,6 @@ P_data = []
 timestamps = []
 data_lock = threading.Lock()
 
-# Open a CSV file to store the data
-with open('sensor_data.csv', 'w', newline='') as file:
-    writer = csv.writer(file)
-    # Write the header with an added 'Time' column
-    writer.writerow(['Time', 'PYR', 'T', 'V', 'I', 'P'])
 
 # Crear una figura para cada conjunto de datos
 def create_figure(x_data, y_data, title, yaxis_title):
@@ -48,53 +40,18 @@ def create_figure(x_data, y_data, title, yaxis_title):
         title=title,
         xaxis_title="Tiempo",
         yaxis_title=yaxis_title,
-        xaxis=dict(type='date')
+        xaxis=dict(type='date', gridcolor='lightgrey', linecolor='lightgrey'),
+        yaxis=dict(gridcolor='lightgrey', linecolor='lightgrey'),
+        plot_bgcolor='white',  # Color de fondo de la gráfica
+        paper_bgcolor='white',  # Color de fondo alrededor de la gráfica
+    )
+    fig.update_xaxes(
+        tickformat="%d-%m-%Y %H:%M",
+        tickangle=45,
+        nticks=20
     )
     return fig
 
-# Función para manejar la conexión del cliente
-def handle_client_connection(client_socket):
-    global pyr_data, t_data, v_data, i_data, P_data, timestamps
-    with client_socket:
-        while True:
-            received_data = client_socket.recv(1024).decode('utf-8')
-            if not received_data:
-                break
-
-            # Procesamiento de los datos recibidos
-            sensor_values = received_data.split(',')
-            if len(sensor_values) == 5:
-                with data_lock:
-                    pyr_value, t_value, v_value, i_value, P_value = [float(val.split(": ")[1]) for val in sensor_values]
-                    current_time = datetime.datetime.now()
-
-                    # Actualizar listas de datos
-                    pyr_data.append(pyr_value)
-                    t_data.append(t_value)
-                    v_data.append(v_value)
-                    i_data.append(i_value)
-                    P_data.append(P_value)
-                    timestamps.append(current_time)
-
-                    # Escribir en el archivo CSV
-                    with open('sensor_data.csv', 'a', newline='') as file:
-                        writer = csv.writer(file)
-                        writer.writerow([current_time, pyr_value, t_value, v_value, i_value, P_value])
-
-# Función para ejecutar el servidor de sockets
-def run_socket_server():
-    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    serversocket.bind(('0.0.0.0', 1234))
-    serversocket.listen(5)
-
-    while True:
-        clientsocket, address = serversocket.accept()
-        client_thread = threading.Thread(target=handle_client_connection, args=(clientsocket,))
-        client_thread.start()
-
-
-# Iniciar el servidor de sockets en un hilo separado
-threading.Thread(target=run_socket_server, daemon=True).start()
 
 # DASH ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -211,12 +168,17 @@ app.layout = html.Div(style={'overflowY': 'auto'},
 )
 
 def update_graphs(n):
-    with data_lock:
-        fig_irradiance = create_figure(timestamps, pyr_data, 'Irradiancia', 'W/m^2')
-        fig_temperature = create_figure(timestamps, t_data, 'Temperatura', '°C')
-        fig_voltage = create_figure(timestamps, v_data, 'Voltaje', 'V')
-        fig_current = create_figure(timestamps, i_data, 'Corriente', 'A')
-        fig_power = create_figure(timestamps, P_data, 'Potencia', 'W')
+    # Read data from the CSV file
+    data = pd.read_csv('sensor_data.csv')
+    data['Time'] = pd.to_datetime(data['Time'])  # Convert the time column to datetime
+
+    # Create figures using the data from the CSV file
+    fig_irradiance = create_figure(data['Time'], data['PYR'], 'Irradiancia', 'W/m<sup>2</sup>')
+    fig_temperature = create_figure(data['Time'], data['T'], 'Temperatura', '°C')
+    fig_voltage = create_figure(data['Time'], data['V'], 'Voltaje', 'V')
+    fig_current = create_figure(data['Time'], data['I'], 'Corriente', 'A')
+    fig_power = create_figure(data['Time'], data['P'], 'Potencia', 'W')
+
     return fig_irradiance, fig_temperature, fig_voltage, fig_current, fig_power
 
 if __name__ == '__main__':
